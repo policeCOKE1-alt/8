@@ -1,0 +1,96 @@
+-- Tracers.txt (Modified to support stopping)
+
+-- Ensure Drawing API is supported
+if not Drawing then
+    error("Your executor does not support the Drawing API.")
+end
+
+local tracers = {}
+tracers.running = true
+tracers.playerLines = {}  -- Table to store Drawing objects for each player
+
+-- Settings
+local lineLength = 50 -- Length of the green line (adjustable)
+local updateInterval = 0.01 -- Update interval for smoother performance (adjustable)
+
+-- Function to create or update a line for a player
+local function updateLine(player, headPosition, lookDirection)
+    if not tracers.playerLines[player] then
+        -- Create a new line
+        local line = Drawing.new("Line")
+        line.Color = Color3.new(0, 1, 0) -- Green
+        line.Thickness = 2
+        line.Transparency = 1
+        tracers.playerLines[player] = line
+    end
+
+    local line = tracers.playerLines[player]
+    local camera = workspace.CurrentCamera
+    local startScreenPos = camera:WorldToViewportPoint(headPosition)
+    local endScreenPos = camera:WorldToViewportPoint(headPosition + (lookDirection * lineLength))
+
+    if startScreenPos.Z > 0 and endScreenPos.Z > 0 then
+        line.Visible = true
+        line.From = Vector2.new(startScreenPos.X, startScreenPos.Y)
+        line.To = Vector2.new(endScreenPos.X, endScreenPos.Y)
+    else
+        line.Visible = false
+    end
+end
+
+-- Function to update lines for all players
+local function updatePlayers()
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+        if player.Character and player.Character:FindFirstChild("Head") then
+            local head = player.Character.Head
+            local character = player.Character
+
+            if character:FindFirstChild("HumanoidRootPart") then
+                local rootPart = character.HumanoidRootPart
+                local lookDirection = rootPart.CFrame.LookVector -- Base direction from HumanoidRootPart
+                if player == game:GetService("Players").LocalPlayer then
+                    lookDirection = workspace.CurrentCamera.CFrame.LookVector -- Use camera direction for local player
+                end
+                updateLine(player, head.Position, lookDirection)
+            end
+        end
+    end
+end
+
+-- Cleanup function for when players leave
+local function onPlayerRemoving(player)
+    if tracers.playerLines[player] then
+        tracers.playerLines[player]:Remove()
+        tracers.playerLines[player] = nil
+    end
+end
+
+-- Connect player removing event and store connection for later cleanup
+tracers.playerRemovingConnection = game:GetService("Players").PlayerRemoving:Connect(onPlayerRemoving)
+
+-- Main loop: update lines in a coroutine so we can stop it later
+tracers.loop = coroutine.create(function()
+    while tracers.running do
+        pcall(updatePlayers)
+        task.wait(updateInterval)
+    end
+end)
+coroutine.resume(tracers.loop)
+
+-- Stop method to disconnect events and remove all drawing objects
+function tracers.stop()
+    tracers.running = false
+    if tracers.playerRemovingConnection then
+        tracers.playerRemovingConnection:Disconnect()
+    end
+    for _, line in pairs(tracers.playerLines) do
+        if line and line.Remove then
+            line:Remove()
+        end
+    end
+    tracers.playerLines = {}
+    print("[DEBUG] Tracers stopped.")
+end
+
+print("[DEBUG] Tracers script started.")
+return tracers
