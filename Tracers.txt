@@ -89,8 +89,6 @@ function tracers.stop()
         end
     end
     tracers.playerLines = {}
-    print("[DEBUG] Tracers stopped.")
 end
 
-print("[DEBUG] Tracers script started.")
 return tracers
